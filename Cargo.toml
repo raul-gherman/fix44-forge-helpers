@@ -1,0 +1,34 @@
+[package]
+authors = ["Raul Gherman <raul@gherman.proton.me>"]
+categories = ["parser-implementations", "encoding", "network-programming"]
+description = "Zero-allocation, high-performance helper functions for FIX 4.4 protocol parsing and serialization"
+documentation = "https://docs.rs/fix44-forge-helpers"
+edition = "2024"
+exclude = ["target/", "benches/target/"]
+homepage = "https://github.com/raul-gherman/fix44-forge"
+keywords = ["fix", "protocol", "parsing", "serialization", "finance"]
+license = "MIT OR Apache-2.0"
+name = "fix44-forge-helpers"
+readme = "README.md"
+repository = "https://github.com/raul-gherman/fix44-forge-helpers"
+rust-version = "1.89"
+version = "0.1.3"
+
+# Platform support - Unix-like systems only
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(not(unix))'.dependencies]
+# Compilation will fail on non-Unix platforms (Windows)
+# This is intentional - the crate requires Unix system calls
+
+[dev-dependencies]
+criterion = "0.7"
+
+[[bench]]
+name = "reading_benchmarks"
+harness = false
+
+[[bench]]
+name = "writing_benchmarks"
+harness = false
