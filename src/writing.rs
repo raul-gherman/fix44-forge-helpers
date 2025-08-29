@@ -192,11 +192,7 @@ fn digits_u128(n: u128) -> usize {
 /// assert_eq!(&buf[..written], b"12345");
 /// ```
 #[inline(always)]
-pub fn write_u16(
-    mut n: u16,
-    buf: &mut [u8],
-    pos: usize,
-) -> usize {
+pub fn write_u16(mut n: u16, buf: &mut [u8], pos: usize) -> usize {
     let len = digits_u16(n);
     let mut i = pos + len;
     while n >= 100 {
@@ -231,11 +227,7 @@ pub fn write_u16(
 /// # Safety
 /// Caller must ensure buffer has at least 10 bytes available from offset.
 #[inline(always)]
-pub fn write_u32(
-    mut n: u32,
-    buf: &mut [u8],
-    pos: usize,
-) -> usize {
+pub fn write_u32(mut n: u32, buf: &mut [u8], pos: usize) -> usize {
     let len = digits_u32(n);
     let mut i = pos + len;
     while n >= 100 {
@@ -270,11 +262,7 @@ pub fn write_u32(
 /// # Safety
 /// Caller must ensure buffer has at least 20 bytes available from offset.
 #[inline(always)]
-pub fn write_u64(
-    mut n: u64,
-    buf: &mut [u8],
-    pos: usize,
-) -> usize {
+pub fn write_u64(mut n: u64, buf: &mut [u8], pos: usize) -> usize {
     let len = digits_u64(n);
     let mut i = pos + len;
     while n >= 100 {
@@ -309,11 +297,7 @@ pub fn write_u64(
 /// # Safety
 /// Caller must ensure buffer has at least 39 bytes available from offset.
 #[inline(always)]
-pub fn write_u128(
-    mut n: u128,
-    buf: &mut [u8],
-    pos: usize,
-) -> usize {
+pub fn write_u128(mut n: u128, buf: &mut [u8], pos: usize) -> usize {
     let len = digits_u128(n);
     let mut i = pos + len;
     while n >= 100 {
@@ -347,11 +331,7 @@ pub fn write_u128(
 ///
 /// Handles the sign and delegates to write_u16 for the magnitude.
 #[inline(always)]
-pub fn write_i16(
-    n: i16,
-    buf: &mut [u8],
-    offset: usize,
-) -> usize {
+pub fn write_i16(n: i16, buf: &mut [u8], offset: usize) -> usize {
     if n >= 0 {
         write_u16(n as u16, buf, offset)
     } else if n == i16::MIN {
@@ -359,11 +339,7 @@ pub fn write_i16(
         let bytes = b"32768";
         unsafe {
             *buf.get_unchecked_mut(offset) = b'-';
-            ptr::copy_nonoverlapping(
-                bytes.as_ptr(),
-                buf.as_mut_ptr().add(offset + 1),
-                5,
-            );
+            ptr::copy_nonoverlapping(bytes.as_ptr(), buf.as_mut_ptr().add(offset + 1), 5);
         }
         6
     } else {
@@ -376,22 +352,14 @@ pub fn write_i16(
 
 /// Write an i32 to buffer at offset, returns bytes written.
 #[inline(always)]
-pub fn write_i32(
-    n: i32,
-    buf: &mut [u8],
-    offset: usize,
-) -> usize {
+pub fn write_i32(n: i32, buf: &mut [u8], offset: usize) -> usize {
     if n >= 0 {
         write_u32(n as u32, buf, offset)
     } else if n == i32::MIN {
         let bytes = b"2147483648";
         unsafe {
             *buf.get_unchecked_mut(offset) = b'-';
-            ptr::copy_nonoverlapping(
-                bytes.as_ptr(),
-                buf.as_mut_ptr().add(offset + 1),
-                10,
-            );
+            ptr::copy_nonoverlapping(bytes.as_ptr(), buf.as_mut_ptr().add(offset + 1), 10);
         }
         11
     } else {
@@ -404,22 +372,14 @@ pub fn write_i32(
 
 /// Write an i64 to buffer at offset, returns bytes written.
 #[inline(always)]
-pub fn write_i64(
-    n: i64,
-    buf: &mut [u8],
-    offset: usize,
-) -> usize {
+pub fn write_i64(n: i64, buf: &mut [u8], offset: usize) -> usize {
     if n >= 0 {
         write_u64(n as u64, buf, offset)
     } else if n == i64::MIN {
         let bytes = b"9223372036854775808";
         unsafe {
             *buf.get_unchecked_mut(offset) = b'-';
-            ptr::copy_nonoverlapping(
-                bytes.as_ptr(),
-                buf.as_mut_ptr().add(offset + 1),
-                19,
-            );
+            ptr::copy_nonoverlapping(bytes.as_ptr(), buf.as_mut_ptr().add(offset + 1), 19);
         }
         20
     } else {
@@ -432,11 +392,7 @@ pub fn write_i64(
 
 /// Write exactly 6 fractional digits from a u32 scaled value.
 #[inline(always)]
-fn write_frac6_from_u32(
-    mut v: u32,
-    buf: &mut [u8],
-    pos: usize,
-) -> usize {
+fn write_frac6_from_u32(mut v: u32, buf: &mut [u8], pos: usize) -> usize {
     let p0 = (v % 100) as usize;
     v /= 100;
     let p1 = (v % 100) as usize;
@@ -456,11 +412,7 @@ fn write_frac6_from_u32(
 
 /// Write exactly 15 fractional digits from a u128 scaled value.
 #[inline(always)]
-fn write_frac15_from_u128(
-    mut v: u128,
-    buf: &mut [u8],
-    pos: usize,
-) -> usize {
+fn write_frac15_from_u128(mut v: u128, buf: &mut [u8], pos: usize) -> usize {
     let p0 = (v % 100) as usize;
     v /= 100;
     let p1 = (v % 100) as usize;
@@ -508,11 +460,7 @@ fn write_frac15_from_u128(
 /// # Safety
 /// Caller must ensure finite input values. NaN/Inf behavior is undefined.
 #[inline(always)]
-pub fn write_f32(
-    n: f32,
-    buf: &mut [u8],
-    offset: usize,
-) -> usize {
+pub fn write_f32(n: f32, buf: &mut [u8], offset: usize) -> usize {
     let mut pos = offset;
 
     let neg = n.is_sign_negative();
@@ -562,11 +510,7 @@ pub fn write_f32(
 /// # Safety
 /// Caller must ensure finite input values. NaN/Inf behavior is undefined.
 #[inline(always)]
-pub fn write_f64(
-    n: f64,
-    buf: &mut [u8],
-    offset: usize,
-) -> usize {
+pub fn write_f64(n: f64, buf: &mut [u8], offset: usize) -> usize {
     let mut pos = offset;
 
     let neg = n.is_sign_negative();
@@ -637,9 +581,7 @@ pub fn write_tag_and_bool(
     }
     let pos = tag_and_eq.len();
     unsafe {
-        let ptr = bytes
-            .as_mut_ptr()
-            .add(offset + pos);
+        let ptr = bytes.as_mut_ptr().add(offset + pos);
         *ptr = if value { b'Y' } else { b'N' };
         *ptr.add(1) = 0x01;
     }
@@ -654,7 +596,6 @@ pub fn write_tag_and_bytes(
     tag_and_eq: &[u8],
     value: &[u8],
 ) -> usize {
-    let mut pos = 0;
     unsafe {
         ptr::copy_nonoverlapping(
             tag_and_eq.as_ptr(),
@@ -662,13 +603,11 @@ pub fn write_tag_and_bytes(
             tag_and_eq.len(),
         );
     }
-    pos += tag_and_eq.len();
+    let mut pos = tag_and_eq.len();
     unsafe {
         ptr::copy_nonoverlapping(
             value.as_ptr(),
-            bytes
-                .as_mut_ptr()
-                .add(offset + pos),
+            bytes.as_mut_ptr().add(offset + pos),
             value.len(),
         );
     }
@@ -681,29 +620,13 @@ pub fn write_tag_and_bytes(
 
 /// Write a FIX tag, equals sign, string value, and SOH delimiter.
 #[inline(always)]
-pub fn write_tag_and_str(
-    bytes: &mut [u8],
-    offset: usize,
-    tag_and_eq: &[u8],
-    value: &str,
-) -> usize {
-    write_tag_and_bytes(
-        bytes,
-        offset,
-        tag_and_eq,
-        value.as_bytes(),
-    )
+pub fn write_tag_and_str(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], value: &str) -> usize {
+    write_tag_and_bytes(bytes, offset, tag_and_eq, value.as_bytes())
 }
 
 /// Write a FIX tag, equals sign, u16 value, and SOH delimiter.
 #[inline(always)]
-pub fn write_tag_and_u16(
-    bytes: &mut [u8],
-    offset: usize,
-    tag_and_eq: &[u8],
-    value: u16,
-) -> usize {
-    let mut pos = 0;
+pub fn write_tag_and_u16(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], value: u16) -> usize {
     unsafe {
         ptr::copy_nonoverlapping(
             tag_and_eq.as_ptr(),
@@ -711,7 +634,7 @@ pub fn write_tag_and_u16(
             tag_and_eq.len(),
         );
     }
-    pos += tag_and_eq.len();
+    let mut pos = tag_and_eq.len();
     pos += write_u16(value, bytes, offset + pos);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
@@ -721,13 +644,7 @@ pub fn write_tag_and_u16(
 
 /// Write a FIX tag, equals sign, u32 value, and SOH delimiter.
 #[inline(always)]
-pub fn write_tag_and_u32(
-    bytes: &mut [u8],
-    offset: usize,
-    tag_and_eq: &[u8],
-    value: u32,
-) -> usize {
-    let mut pos = 0;
+pub fn write_tag_and_u32(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], value: u32) -> usize {
     unsafe {
         ptr::copy_nonoverlapping(
             tag_and_eq.as_ptr(),
@@ -735,7 +652,7 @@ pub fn write_tag_and_u32(
             tag_and_eq.len(),
         );
     }
-    pos += tag_and_eq.len();
+    let mut pos = tag_and_eq.len();
     pos += write_u32(value, bytes, offset + pos);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
@@ -745,13 +662,7 @@ pub fn write_tag_and_u32(
 
 /// Write a FIX tag, equals sign, u64 value, and SOH delimiter.
 #[inline(always)]
-pub fn write_tag_and_u64(
-    bytes: &mut [u8],
-    offset: usize,
-    tag_and_eq: &[u8],
-    value: u64,
-) -> usize {
-    let mut pos = 0;
+pub fn write_tag_and_u64(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], value: u64) -> usize {
     unsafe {
         ptr::copy_nonoverlapping(
             tag_and_eq.as_ptr(),
@@ -759,7 +670,7 @@ pub fn write_tag_and_u64(
             tag_and_eq.len(),
         );
     }
-    pos += tag_and_eq.len();
+    let mut pos = tag_and_eq.len();
     pos += write_u64(value, bytes, offset + pos);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
@@ -769,13 +680,7 @@ pub fn write_tag_and_u64(
 
 /// Write a FIX tag, equals sign, i16 value, and SOH delimiter.
 #[inline(always)]
-pub fn write_tag_and_i16(
-    bytes: &mut [u8],
-    offset: usize,
-    tag_and_eq: &[u8],
-    value: i16,
-) -> usize {
-    let mut pos = 0;
+pub fn write_tag_and_i16(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], value: i16) -> usize {
     unsafe {
         ptr::copy_nonoverlapping(
             tag_and_eq.as_ptr(),
@@ -783,7 +688,7 @@ pub fn write_tag_and_i16(
             tag_and_eq.len(),
         );
     }
-    pos += tag_and_eq.len();
+    let mut pos = tag_and_eq.len();
     pos += write_i16(value, bytes, offset + pos);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
@@ -793,13 +698,7 @@ pub fn write_tag_and_i16(
 
 /// Write a FIX tag, equals sign, i32 value, and SOH delimiter.
 #[inline(always)]
-pub fn write_tag_and_i32(
-    bytes: &mut [u8],
-    offset: usize,
-    tag_and_eq: &[u8],
-    value: i32,
-) -> usize {
-    let mut pos = 0;
+pub fn write_tag_and_i32(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], value: i32) -> usize {
     unsafe {
         ptr::copy_nonoverlapping(
             tag_and_eq.as_ptr(),
@@ -807,7 +706,7 @@ pub fn write_tag_and_i32(
             tag_and_eq.len(),
         );
     }
-    pos += tag_and_eq.len();
+    let mut pos = tag_and_eq.len();
     pos += write_i32(value, bytes, offset + pos);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
@@ -817,13 +716,7 @@ pub fn write_tag_and_i32(
 
 /// Write a FIX tag, equals sign, i64 value, and SOH delimiter.
 #[inline(always)]
-pub fn write_tag_and_i64(
-    bytes: &mut [u8],
-    offset: usize,
-    tag_and_eq: &[u8],
-    value: i64,
-) -> usize {
-    let mut pos = 0;
+pub fn write_tag_and_i64(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], value: i64) -> usize {
     unsafe {
         ptr::copy_nonoverlapping(
             tag_and_eq.as_ptr(),
@@ -831,7 +724,7 @@ pub fn write_tag_and_i64(
             tag_and_eq.len(),
         );
     }
-    pos += tag_and_eq.len();
+    let mut pos = tag_and_eq.len();
     pos += write_i64(value, bytes, offset + pos);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
@@ -841,13 +734,7 @@ pub fn write_tag_and_i64(
 
 /// Write a FIX tag, equals sign, f32 value, and SOH delimiter.
 #[inline(always)]
-pub fn write_tag_and_f32(
-    bytes: &mut [u8],
-    offset: usize,
-    tag_and_eq: &[u8],
-    value: f32,
-) -> usize {
-    let mut pos = 0;
+pub fn write_tag_and_f32(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], value: f32) -> usize {
     unsafe {
         ptr::copy_nonoverlapping(
             tag_and_eq.as_ptr(),
@@ -855,7 +742,7 @@ pub fn write_tag_and_f32(
             tag_and_eq.len(),
         );
     }
-    pos += tag_and_eq.len();
+    let mut pos = tag_and_eq.len();
     pos += write_f32(value, bytes, offset + pos);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
@@ -865,13 +752,7 @@ pub fn write_tag_and_f32(
 
 /// Write a FIX tag, equals sign, f64 value, and SOH delimiter.
 #[inline(always)]
-pub fn write_tag_and_f64(
-    bytes: &mut [u8],
-    offset: usize,
-    tag_and_eq: &[u8],
-    value: f64,
-) -> usize {
-    let mut pos = 0;
+pub fn write_tag_and_f64(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], value: f64) -> usize {
     unsafe {
         ptr::copy_nonoverlapping(
             tag_and_eq.as_ptr(),
@@ -879,7 +760,7 @@ pub fn write_tag_and_f64(
             tag_and_eq.len(),
         );
     }
-    pos += tag_and_eq.len();
+    let mut pos = tag_and_eq.len();
     pos += write_f64(value, bytes, offset + pos);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
@@ -902,27 +783,18 @@ mod tests {
         assert_eq!(&buf[..3], b"123");
 
         let mut buf = [0u8; 10];
-        assert_eq!(
-            write_u16(65535, &mut buf, 0),
-            5
-        );
+        assert_eq!(write_u16(65535, &mut buf, 0), 5);
         assert_eq!(&buf[..5], b"65535");
     }
 
     #[test]
     fn test_write_i16() {
         let mut buf = [0u8; 10];
-        assert_eq!(
-            write_i16(-123, &mut buf, 0),
-            4
-        );
+        assert_eq!(write_i16(-123, &mut buf, 0), 4);
         assert_eq!(&buf[..4], b"-123");
 
         let mut buf = [0u8; 10];
-        assert_eq!(
-            write_i16(i16::MIN, &mut buf, 0),
-            6
-        );
+        assert_eq!(write_i16(i16::MIN, &mut buf, 0), 6);
         assert_eq!(&buf[..6], b"-32768");
     }
 
@@ -963,9 +835,6 @@ mod tests {
     fn test_write_tag_and_u32() {
         let mut buf = [0u8; 20];
         let written = write_tag_and_u32(&mut buf, 0, b"34=", 12345);
-        assert_eq!(
-            &buf[..written],
-            b"34=12345\x01"
-        );
+        assert_eq!(&buf[..written], b"34=12345\x01");
     }
 }

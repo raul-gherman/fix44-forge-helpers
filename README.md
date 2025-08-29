@@ -32,7 +32,7 @@ If you need Windows compatibility, please consider crates in rust ecosystem that
 - **Zero Allocations**: All operations use stack-only memory or write directly to caller-provided buffers
 - **High Performance**: Optimized with unsafe code, precomputed lookup tables, and minimal branching
 - **Comprehensive**: Supports all FIX data types including integers, floats, booleans, strings, and timestamps
-- **Specialized Functions**: Includes ClOrdID generation, timestamp formatting, and Base36 encoding
+- **Specialized Functions**: Includes ClOrdID generation, FIX timestamp formatting, high-resolution logging timestamps, and Base36 encoding
 - **Well Tested**: Comprehensive test suite with edge cases and performance benchmarks
 
 ## Quick Start
@@ -107,9 +107,15 @@ let mut buffer = [0u8; 100];
 let written = write_tag_and_ClOrdID(&mut buffer, 0, b"11=");
 // Result: b"11=ABCDEFGHIJKLM\x01" (13-char base36 ID)
 
-// Write current timestamp
+// Write current FIX timestamp (21 bytes value part)
 let written = write_tag_and_current_timestamp(&mut buffer, 0, b"52=");
 // Result: b"52=20240101-12:34:56.789\x01"
+```
+// High-resolution logging timestamp (no tag/SOH) -> "YYYY-MM-DD HH:MM:SS.mmm.uuu.nnn"
+let mut log_buf = [0u8; 64];
+let len = write_current_logging_timestamp(&mut log_buf, 0);
+let ts_str = core::str::from_utf8(&log_buf[..len]).unwrap();
+println!("log ts: {ts_str}");
 ```
 
 ## Performance Characteristics
@@ -134,7 +140,8 @@ Typical performance on modern hardware:
 - Integer parsing: ~1-2 ns per digit
 - Float parsing: ~10-20 ns depending on precision
 - Tag writing: ~5-25 ns depending on value type
-- Timestamp generation: ~25-30 ns (with date caching)
+- FIX timestamp (21-byte): ~20-25 ns (cached pre-rendered date digits)
+- Logging timestamp (31-byte hi-res): ~25-35 ns (YYYY-MM-DD HH:MM:SS.mmm.uuu.nnn)
 
 ## Safety Considerations
 
@@ -160,6 +167,7 @@ This crate uses `unsafe` code extensively for performance. When using writing fu
 | `f64` | ~25 (sign + integer + '.' + 15 fractional) |
 | Timestamp | 21 (YYYYMMDD-HH:MM:SS.mmm) |
 | ClOrdID | 13 (base36 encoding) |
+| Logging Timestamp | 31 (YYYY-MM-DD HH:MM:SS.mmm.uuu.nnn) |
 
 ## Float Handling
 
@@ -189,12 +197,12 @@ Generates unique 13-character base36 identifiers suitable for FIX ClOrdID fields
 
 ## Timestamp Handling
 
-Optimized UTC timestamp generation in FIX format (YYYYMMDD-HH:MM:SS.mmm):
+Optimized UTC timestamp generation in FIX format (YYYYMMDD-HH:MM:SS.mmm) plus an optional high-resolution logging format (YYYY-MM-DD HH:MM:SS.mmm.uuu.nnn):
 
 - **Performance**: Uses `libc::clock_gettime` for speed (Unix-only)
-- **Caching**: Date calculations cached when multiple timestamps in same day
-- **Format**: Always 21 characters, zero-padded
-- **Precision**: Millisecond accuracy
+- **Caching**: Pre-renders date digits once per day (cache hit avoids year/month/day formatting)
+- **Formats**: FIX (21 chars) and logging (31 chars)
+- **Precision**: Millisecond accuracy for FIX; millisecond + microsecond + nanosecond grouping for logging
 - **Platform**: Requires Unix libc - not available on Windows
 
 ## Error Handling

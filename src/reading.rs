@@ -83,10 +83,7 @@ fn is_digit(b: u8) -> bool {
 /// ```
 #[inline(always)]
 pub fn read_bool(buf: &[u8]) -> bool {
-    match buf {
-        b"Y" => true,
-        _ => false,
-    }
+    matches!(buf, [b'Y'])
 }
 
 /// Convert bytes to a string slice without UTF-8 validation.
@@ -161,9 +158,7 @@ pub fn read_u32(buf: &[u8]) -> u32 {
         if !is_digit(b) {
             break;
         }
-        acc = acc
-            .wrapping_mul(10)
-            .wrapping_add((b - b'0') as u32);
+        acc = acc.wrapping_mul(10).wrapping_add((b - b'0') as u32);
         i += 1;
     }
     acc
@@ -194,9 +189,7 @@ pub fn read_u64(buf: &[u8]) -> u64 {
         if !is_digit(b) {
             break;
         }
-        acc = acc
-            .wrapping_mul(10)
-            .wrapping_add((b - b'0') as u64);
+        acc = acc.wrapping_mul(10).wrapping_add((b - b'0') as u64);
         i += 1;
     }
     acc
@@ -327,9 +320,7 @@ pub fn read_f32(buf: &[u8]) -> f32 {
         if !is_digit(b) {
             break;
         }
-        int_acc = int_acc
-            .wrapping_mul(10)
-            .wrapping_add((b - b'0') as u64);
+        int_acc = int_acc.wrapping_mul(10).wrapping_add((b - b'0') as u64);
         i += 1;
     }
 
@@ -344,9 +335,7 @@ pub fn read_f32(buf: &[u8]) -> f32 {
                 break;
             }
             if frac_len < F32_FRAC_MAX {
-                frac_acc = frac_acc
-                    .wrapping_mul(10)
-                    .wrapping_add((b - b'0') as u32);
+                frac_acc = frac_acc.wrapping_mul(10).wrapping_add((b - b'0') as u32);
                 frac_len += 1;
             }
             i += 1;
@@ -404,9 +393,7 @@ pub fn read_f64(buf: &[u8]) -> f64 {
         if !is_digit(b) {
             break;
         }
-        int_acc = int_acc
-            .wrapping_mul(10)
-            .wrapping_add((b - b'0') as u128);
+        int_acc = int_acc.wrapping_mul(10).wrapping_add((b - b'0') as u128);
         i += 1;
     }
 
@@ -421,9 +408,7 @@ pub fn read_f64(buf: &[u8]) -> f64 {
                 break;
             }
             if frac_len < F64_FRAC_MAX {
-                frac_acc = frac_acc
-                    .wrapping_mul(10)
-                    .wrapping_add((b - b'0') as u128);
+                frac_acc = frac_acc.wrapping_mul(10).wrapping_add((b - b'0') as u128);
                 frac_len += 1;
             }
             i += 1;
@@ -459,10 +444,7 @@ mod tests {
     fn test_read_str() {
         assert_eq!(read_str(b"hello"), "hello");
         assert_eq!(read_str(b""), "");
-        assert_eq!(
-            read_str(b"test123"),
-            "test123"
-        );
+        assert_eq!(read_str(b"test123"), "test123");
     }
 
     #[test]
@@ -478,14 +460,8 @@ mod tests {
     #[test]
     fn test_read_u32() {
         assert_eq!(read_u32(b"0"), 0);
-        assert_eq!(
-            read_u32(b"123456789"),
-            123456789
-        );
-        assert_eq!(
-            read_u32(b"4294967295"),
-            4294967295
-        );
+        assert_eq!(read_u32(b"123456789"), 123456789);
+        assert_eq!(read_u32(b"4294967295"), 4294967295);
         assert_eq!(read_u32(b"123abc"), 123);
         assert_eq!(read_u32(b""), 0);
     }
@@ -493,14 +469,8 @@ mod tests {
     #[test]
     fn test_read_u64() {
         assert_eq!(read_u64(b"0"), 0);
-        assert_eq!(
-            read_u64(b"123456789012345"),
-            123456789012345
-        );
-        assert_eq!(
-            read_u64(b"18446744073709551615"),
-            18446744073709551615
-        );
+        assert_eq!(read_u64(b"123456789012345"), 123456789012345);
+        assert_eq!(read_u64(b"18446744073709551615"), 18446744073709551615);
         assert_eq!(read_u64(b"123abc"), 123);
         assert_eq!(read_u64(b""), 0);
     }
@@ -519,44 +489,20 @@ mod tests {
     #[test]
     fn test_read_i32() {
         assert_eq!(read_i32(b"0"), 0);
-        assert_eq!(
-            read_i32(b"123456789"),
-            123456789
-        );
-        assert_eq!(
-            read_i32(b"-123456789"),
-            -123456789
-        );
-        assert_eq!(
-            read_i32(b"2147483647"),
-            2147483647
-        );
-        assert_eq!(
-            read_i32(b"-2147483648"),
-            -2147483648
-        );
+        assert_eq!(read_i32(b"123456789"), 123456789);
+        assert_eq!(read_i32(b"-123456789"), -123456789);
+        assert_eq!(read_i32(b"2147483647"), 2147483647);
+        assert_eq!(read_i32(b"-2147483648"), -2147483648);
         assert_eq!(read_i32(b""), 0);
     }
 
     #[test]
     fn test_read_i64() {
         assert_eq!(read_i64(b"0"), 0);
-        assert_eq!(
-            read_i64(b"123456789012345"),
-            123456789012345
-        );
-        assert_eq!(
-            read_i64(b"-123456789012345"),
-            -123456789012345
-        );
-        assert_eq!(
-            read_i64(b"9223372036854775807"),
-            9223372036854775807
-        );
-        assert_eq!(
-            read_i64(b"-9223372036854775808"),
-            -9223372036854775808
-        );
+        assert_eq!(read_i64(b"123456789012345"), 123456789012345);
+        assert_eq!(read_i64(b"-123456789012345"), -123456789012345);
+        assert_eq!(read_i64(b"9223372036854775807"), 9223372036854775807);
+        assert_eq!(read_i64(b"-9223372036854775808"), -9223372036854775808);
         assert_eq!(read_i64(b""), 0);
     }
 
@@ -564,10 +510,7 @@ mod tests {
     fn test_read_f32() {
         assert_eq!(read_f32(b"0"), 0.0);
         assert_eq!(read_f32(b"123.456"), 123.456);
-        assert_eq!(
-            read_f32(b"-123.456"),
-            -123.456
-        );
+        assert_eq!(read_f32(b"-123.456"), -123.456);
         assert_eq!(read_f32(b"123"), 123.0);
         assert_eq!(read_f32(b".456"), 0.456);
         assert_eq!(read_f32(b"123."), 123.0);
@@ -578,14 +521,8 @@ mod tests {
     #[test]
     fn test_read_f64() {
         assert_eq!(read_f64(b"0"), 0.0);
-        assert_eq!(
-            read_f64(b"123.456789012345"),
-            123.456789012345
-        );
-        assert_eq!(
-            read_f64(b"-123.456"),
-            -123.456
-        );
+        assert_eq!(read_f64(b"123.456789012345"), 123.456789012345);
+        assert_eq!(read_f64(b"-123.456"), -123.456);
         assert_eq!(read_f64(b"123"), 123.0);
         assert_eq!(read_f64(b".456"), 0.456);
         assert_eq!(read_f64(b"123."), 123.0);

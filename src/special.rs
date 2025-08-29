@@ -59,7 +59,7 @@ fn publish_date_for_day(day_number: u64) {
     let mp = (5 * doy + 2) / 153;
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = mp + if mp < 10 { 3 } else { -9 };
-    let year = (y + if m <= 2 { -1 } else { 0 }) as u16;
+    let year = (y + if m <= 2 { 1 } else { 0 }) as u16;
     let month = m as u8;
     let day = d as u8;
 
@@ -399,6 +399,109 @@ pub fn write_tag_and_ClOrdID(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8])
     pos + 1
 }
 
+/// Format a high-resolution logging timestamp: "YYYY-MM-DD HH:MM:SS.mmm.uuu.nnn".
+///
+/// Length: 31 bytes. (No tag / SOH; intended for log lines.)
+/// Uses cached date digits (YYYYMMDD) and inserts '-' separators.
+/// Nanosecond subsecond partitioned into millisecond / microsecond / nanosecond groups.
+///
+/// Returns 31 on success (debug asserts sufficient capacity).
+#[inline(always)]
+pub fn format_logging_timestamp_from_timespec(
+    bytes: &mut [u8],
+    offset: usize,
+    ts: &libc::timespec,
+) -> usize {
+    debug_assert!(bytes.len() >= offset + 31);
+
+    let secs_u64 = ts.tv_sec as u64;
+    let ns = ts.tv_nsec as u32;
+
+    let day_number = secs_u64 / SECS_PER_DAY;
+    let sec_of_day = (secs_u64 - day_number * SECS_PER_DAY) as u32;
+
+    let hour = (sec_of_day / 3600) as u8;
+    let minute = ((sec_of_day % 3600) / 60) as u8;
+    let second = (sec_of_day % 60) as u8;
+
+    // Subsecond groups
+    let millis = ns / 1_000_000;
+    let micros = (ns / 1_000) % 1000;
+    let nanos = ns % 1000;
+
+    ensure_date_cache(day_number);
+
+    unsafe {
+        let p = bytes.as_mut_ptr().add(offset);
+
+        // Cached YYYYMMDD -> need YYYY-MM-DD
+        let packed = CACHED_YYYYMMDD.load(Ordering::Relaxed);
+        let date = packed.to_ne_bytes(); // [Y,Y,Y,Y,M,M,D,D]
+
+        // Year
+        ptr::copy_nonoverlapping(date.as_ptr().add(0), p.add(0), 4);
+        // '-'
+        *p.add(4) = b'-';
+        // Month
+        ptr::copy_nonoverlapping(date.as_ptr().add(4), p.add(5), 2);
+        *p.add(7) = b'-';
+        // Day
+        ptr::copy_nonoverlapping(date.as_ptr().add(6), p.add(8), 2);
+        *p.add(10) = b' ';
+
+        // Hour
+        ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(hour as usize * 2), p.add(11), 2);
+        *p.add(13) = b':';
+
+        // Minute
+        ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(minute as usize * 2), p.add(14), 2);
+        *p.add(16) = b':';
+
+        // Second
+        ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(second as usize * 2), p.add(17), 2);
+        *p.add(19) = b'.';
+
+        // Helper closure to write a 3‑digit zero-padded number fast
+        #[inline(always)]
+        unsafe fn write_3(dst: *mut u8, val: u32) {
+            // val < 1000
+            let hi = (val / 100) as usize;
+            let lo2 = (val % 100) as usize;
+            unsafe {
+                *dst = b'0' + hi as u8;
+                *dst.add(1) = *DIGIT_PAIRS.get_unchecked(lo2 * 2);
+                *dst.add(2) = *DIGIT_PAIRS.get_unchecked(lo2 * 2 + 1);
+            }
+        }
+
+        // Millis
+        write_3(p.add(20), millis);
+        *p.add(23) = b'.';
+        // Micros
+        write_3(p.add(24), micros);
+        *p.add(27) = b'.';
+        // Nanos
+        write_3(p.add(28), nanos);
+    }
+
+    31
+}
+
+/// Convenience wrapper that fetches current time and formats logging timestamp.
+///
+/// Returns 31 bytes written.
+#[inline(always)]
+pub fn write_current_logging_timestamp(bytes: &mut [u8], offset: usize) -> usize {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    unsafe {
+        libc::clock_gettime(libc::CLOCK_REALTIME, &mut ts);
+    }
+    format_logging_timestamp_from_timespec(bytes, offset, &ts)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -471,11 +574,9 @@ mod tests {
         let mut buf = [0u8; 50];
         let written = write_tag_and_current_timestamp(&mut buf, 0, b"52=");
 
-        // Should write tag + timestamp + SOH
         assert_eq!(&buf[..3], b"52=");
-        assert_eq!(buf[written - 1], 0x01); // SOH
+        assert_eq!(buf[written - 1], 0x01);
 
-        // Verify timestamp format: YYYYMMDD-HH:MM:SS.mmm
         let timestamp = &buf[3..written - 1];
         assert_eq!(timestamp.len(), 21);
         assert_eq!(timestamp[8], b'-');
@@ -483,7 +584,6 @@ mod tests {
         assert_eq!(timestamp[14], b':');
         assert_eq!(timestamp[17], b'.');
 
-        // Verify all other characters are digits
         for (i, &byte) in timestamp.iter().enumerate() {
             if ![8, 11, 14, 17].contains(&i) {
                 assert!(
@@ -497,9 +597,37 @@ mod tests {
     }
 
     #[test]
+    fn test_format_logging_timestamp_from_timespec_epoch() {
+        __reset_date_cache_for_test();
+        let ts = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 987_654_321,
+        };
+        let mut buf = [0u8; 64];
+        let written = format_logging_timestamp_from_timespec(&mut buf, 0, &ts);
+        assert_eq!(written, 31);
+        let s = core::str::from_utf8(&buf[..written]).unwrap();
+        assert_eq!(s, "1970-01-01 00:00:00.987.654.321");
+    }
+
+    #[test]
+    fn test_write_current_logging_timestamp_basic() {
+        let mut buf = [0u8; 64];
+        let written = write_current_logging_timestamp(&mut buf, 0);
+        assert_eq!(written, 31);
+        assert_eq!(buf[4], b'-');
+        assert_eq!(buf[7], b'-');
+        assert_eq!(buf[10], b' ');
+        assert_eq!(buf[13], b':');
+        assert_eq!(buf[16], b':');
+        assert_eq!(buf[19], b'.');
+        assert_eq!(buf[23], b'.');
+        assert_eq!(buf[27], b'.');
+    }
+
+    #[test]
     fn test_timestamp_date_cache_rollover() {
         __reset_date_cache_for_test();
-
         let day_n: i64 = 10;
         let ts1 = libc::timespec {
             tv_sec: day_n * 86_400 + 12 * 3600 + 34 * 60 + 56,
@@ -509,18 +637,14 @@ mod tests {
             tv_sec: (day_n + 1) * 86_400 + 1 * 3600 + 2 * 60 + 3,
             tv_nsec: 456_000_000,
         };
-
         let mut buf1 = [0u8; 64];
         let mut buf2 = [0u8; 64];
-
         let w1 = format_timestamp_from_timespec(&mut buf1, 0, b"52=", &ts1);
         let w2 = format_timestamp_from_timespec(&mut buf2, 0, b"52=", &ts2);
-
         assert_eq!(&buf1[..3], b"52=");
         assert_eq!(&buf2[..3], b"52=");
         assert_eq!(w1, 3 + 21 + 1);
         assert_eq!(w2, 3 + 21 + 1);
-
         let date1 = &buf1[3..11];
         let date2 = &buf2[3..11];
         assert_ne!(
