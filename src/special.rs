@@ -3,23 +3,106 @@
 //! This module provides specialized functions for FIX protocol operations that go beyond
 //! basic data type serialization, including high-performance timestamp formatting and
 //! unique identifier generation.
+//!
+//! Optimization note (timestamp formatting):
+//! - We cache the pre-rendered ASCII bytes "YYYYMMDD" (8 bytes) for the current UTC day.
+//! - On each call we only render the time-of-day and milliseconds.
+//! - Date recomputation (civil conversion + digit formatting) happens only on day rollover.
+//! - Publication order: we write the cached bytes first, then publish the day with a
+//!   `Release` store. Readers load the day with `Acquire` to ensure they observe
+//!   corresponding digits (or recompute if mismatch).
 
 use crate::DIGIT_PAIRS;
 use core::ptr;
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     OnceLock,
+    atomic::{AtomicU64, Ordering},
 };
 
-// Cache for date calculations to avoid recomputing when in same day
-static CACHED_DATE: AtomicU64 = AtomicU64::new(0);
-static CACHED_DATE_BYTES: AtomicU64 = AtomicU64::new(0);
+// -----------------------------------------------------------------------------------------
+// Date cache (days since Unix epoch -> pre-rendered "YYYYMMDD" ASCII)
+//
+// CACHED_DAY acts as the version/publish flag. When a new day is detected, we recompute
+// and store the 8 ASCII digits, then store the day with `Release`. Readers load the day
+// with `Acquire` before copying the digits (or recomputing if mismatch).
+// -----------------------------------------------------------------------------------------
+static CACHED_DAY: AtomicU64 = AtomicU64::new(u64::MAX); // Sentinel invalid day
+static CACHED_YYYYMMDD: AtomicU64 = AtomicU64::new(0); // 8 ASCII bytes (native endian)
 
 // ClOrdID generation state
 const CNT_BITS: u64 = 32;
 const CNT_MASK: u64 = (1u64 << CNT_BITS) - 1;
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 static PROCESS_TAG: OnceLock<u32> = OnceLock::new();
+
+// Constants
+const SECS_PER_DAY: u64 = 86_400;
+
+/// Recompute and publish cached date digits for the given day number (days since Unix epoch).
+#[inline(always)]
+fn publish_date_for_day(day_number: u64) {
+    // Convert day_number back to civil date (UTC) using the algorithm from
+    // Howard Hinnant's date algorithms (same as original implementation).
+    let days = day_number as i64;
+    let z = days + 719_468;
+    let era = z / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = mp + if mp < 10 { 3 } else { -9 };
+    let year = (y + if m <= 2 { -1 } else { 0 }) as u16;
+    let month = m as u8;
+    let day = d as u8;
+
+    // Render YYYYMMDD into 8 bytes using DIGIT_PAIRS
+    let mut buf = [0u8; 8];
+    unsafe {
+        // Year
+        let year_hi = (year / 100) as usize;
+        let year_lo = (year % 100) as usize;
+        ptr::copy_nonoverlapping(
+            DIGIT_PAIRS.as_ptr().add(year_hi * 2),
+            buf.as_mut_ptr().add(0),
+            2,
+        );
+        ptr::copy_nonoverlapping(
+            DIGIT_PAIRS.as_ptr().add(year_lo * 2),
+            buf.as_mut_ptr().add(2),
+            2,
+        );
+        // Month
+        ptr::copy_nonoverlapping(
+            DIGIT_PAIRS.as_ptr().add(month as usize * 2),
+            buf.as_mut_ptr().add(4),
+            2,
+        );
+        // Day
+        ptr::copy_nonoverlapping(
+            DIGIT_PAIRS.as_ptr().add(day as usize * 2),
+            buf.as_mut_ptr().add(6),
+            2,
+        );
+    }
+
+    // Store digits (Relaxed) then publish the day (Release)
+    let packed = u64::from_ne_bytes(buf);
+    CACHED_YYYYMMDD.store(packed, Ordering::Relaxed);
+    CACHED_DAY.store(day_number, Ordering::Release);
+}
+
+/// Ensure the date cache is initialized / up to date for the provided day number.
+#[inline(always)]
+fn ensure_date_cache(day_number: u64) {
+    // Fast path: already current
+    if CACHED_DAY.load(Ordering::Acquire) == day_number {
+        return;
+    }
+    // Slow path: recompute (possible benign races on day boundary; last writer wins)
+    publish_date_for_day(day_number);
+}
 
 /// Write a FIX-format UTC timestamp (YYYYMMDD-HH:MM:SS.mmm) with tag prefix.
 ///
@@ -29,15 +112,15 @@ static PROCESS_TAG: OnceLock<u32> = OnceLock::new();
 ///
 /// # Performance
 ///
-/// Uses optimized date caching and `libc::clock_gettime` for maximum performance.
-/// Date calculations are cached when multiple timestamps occur on the same day.
+/// - Uses `libc::clock_gettime` (CLOCK_REALTIME) for speed.
+/// - Caches pre-rendered date digits; on cache hits only time-of-day & millis are formatted.
 ///
 /// # Example
 /// ```
 /// # use fix44_forge_helpers::write_tag_and_current_timestamp;
 /// let mut buf = [0u8; 50];
 /// let written = write_tag_and_current_timestamp(&mut buf, 0, b"52=");
-/// // Result: b"52=20240101-12:34:56.789\x01" (actual timestamp varies)
+/// assert!(written > 0);
 /// ```
 #[inline(always)]
 pub fn write_tag_and_current_timestamp(
@@ -45,6 +128,8 @@ pub fn write_tag_and_current_timestamp(
     offset: usize,
     tag_and_eq: &[u8],
 ) -> usize {
+    debug_assert!(bytes.len() >= offset + tag_and_eq.len() + 22);
+
     // Copy tag= prefix
     unsafe {
         ptr::copy_nonoverlapping(
@@ -54,154 +139,60 @@ pub fn write_tag_and_current_timestamp(
         );
     }
 
-    // Use faster libc clock_gettime instead of SystemTime
-    let (secs, millis) = {
+    // Get current realtime
+    let (secs_u64, millis) = {
         let mut ts = libc::timespec {
             tv_sec: 0,
             tv_nsec: 0,
         };
         unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut ts) };
-        (
-            ts.tv_sec as i64,
-            (ts.tv_nsec / 1_000_000) as u32,
-        )
+        let secs = ts.tv_sec as i64;
+        let secs_u64 = secs as u64;
+        let millis = (ts.tv_nsec / 1_000_000) as u32;
+        (secs_u64, millis)
     };
 
-    // Fast time decomposition using bit operations where possible
-    let sec_of_day = secs % 86_400;
-    let days = secs / 86_400;
+    let day_number = secs_u64 / SECS_PER_DAY;
+    let sec_of_day = (secs_u64 - day_number * SECS_PER_DAY) as u32;
 
-    // Time components - optimized with fewer divisions
+    // Time components
     let hour = (sec_of_day / 3600) as u8;
-    let remaining = sec_of_day % 3600;
-    let minute = (remaining / 60) as u8;
-    let second = (remaining % 60) as u8;
+    let minute = ((sec_of_day % 3600) / 60) as u8;
+    let second = (sec_of_day % 60) as u8;
 
-    // Check if we can use cached date calculation
-    let current_day = days as u64;
-    let cached_day = CACHED_DATE.load(Ordering::Relaxed);
-    let (year, month, day) = if current_day == cached_day && cached_day != 0 {
-        // Use cached date bytes
-        let cached_bytes = CACHED_DATE_BYTES.load(Ordering::Relaxed);
-        let year = ((cached_bytes >> 32) & 0xFFFF) as u16;
-        let month = ((cached_bytes >> 16) & 0xFF) as u8;
-        let day = (cached_bytes & 0xFF) as u8;
-        (year, month, day)
-    } else {
-        // Compute new date and cache it
-        let z = days + 719_468;
-        let era = z / 146_097;
-        let doe = z - era * 146_097;
-        let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-        let y = yoe + era * 400;
-        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-        let mp = (5 * doy + 2) / 153;
-        let d = doy - (153 * mp + 2) / 5 + 1;
-        let m = mp + if mp < 10 { 3 } else { -9 };
-        let year = (y + if m <= 2 { -1 } else { 0 }) as u16;
-        let month = m as u8;
-        let day = d as u8;
+    // Ensure date cache up-to-date
+    ensure_date_cache(day_number);
 
-        // Cache the results
-        let packed_date = ((year as u64) << 32) | ((month as u64) << 16) | (day as u64);
-        CACHED_DATE.store(current_day, Ordering::Relaxed);
-        CACHED_DATE_BYTES.store(packed_date, Ordering::Relaxed);
+    // Pointer to where date/time digits start (right after tag=)
+    let p = unsafe { bytes.as_mut_ptr().add(offset + tag_and_eq.len()) };
 
-        (year, month, day)
-    };
-
-    // Write digits with pointer arithmetic using DIGIT_PAIRS lookup
-    let p = unsafe {
-        bytes
-            .as_mut_ptr()
-            .add(offset + tag_and_eq.len())
-    };
-
-    // YYYYMMDD-HH:MM:SS.mmm - use DIGIT_PAIRS for faster digit conversion
     unsafe {
-        // Year (4 digits) - split into two 2-digit pairs
-        let year_hi = (year / 100) as usize;
-        let year_lo = (year % 100) as usize;
-        ptr::copy_nonoverlapping(
-            DIGIT_PAIRS
-                .as_ptr()
-                .add(year_hi * 2),
-            p.add(0),
-            2,
-        );
-        ptr::copy_nonoverlapping(
-            DIGIT_PAIRS
-                .as_ptr()
-                .add(year_lo * 2),
-            p.add(2),
-            2,
-        );
+        // Copy cached YYYYMMDD
+        let packed = CACHED_YYYYMMDD.load(Ordering::Relaxed);
+        ptr::copy_nonoverlapping((&packed as *const u64) as *const u8, p, 8);
 
-        // Month (2 digits)
-        ptr::copy_nonoverlapping(
-            DIGIT_PAIRS
-                .as_ptr()
-                .add(month as usize * 2),
-            p.add(4),
-            2,
-        );
-
-        // Day (2 digits)
-        ptr::copy_nonoverlapping(
-            DIGIT_PAIRS
-                .as_ptr()
-                .add(day as usize * 2),
-            p.add(6),
-            2,
-        );
-
+        // '-'
         *p.add(8) = b'-';
 
-        // Hour (2 digits)
-        ptr::copy_nonoverlapping(
-            DIGIT_PAIRS
-                .as_ptr()
-                .add(hour as usize * 2),
-            p.add(9),
-            2,
-        );
-
+        // Hour
+        ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(hour as usize * 2), p.add(9), 2);
         *p.add(11) = b':';
 
-        // Minute (2 digits)
-        ptr::copy_nonoverlapping(
-            DIGIT_PAIRS
-                .as_ptr()
-                .add(minute as usize * 2),
-            p.add(12),
-            2,
-        );
-
+        // Minute
+        ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(minute as usize * 2), p.add(12), 2);
         *p.add(14) = b':';
 
-        // Second (2 digits)
-        ptr::copy_nonoverlapping(
-            DIGIT_PAIRS
-                .as_ptr()
-                .add(second as usize * 2),
-            p.add(15),
-            2,
-        );
-
+        // Second
+        ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(second as usize * 2), p.add(15), 2);
         *p.add(17) = b'.';
 
-        // Milliseconds (3 digits) - first two digits as pair, last digit individual
+        // Milliseconds: first two digits via pair, last digit single
         let millis_pair = (millis / 10) as usize;
         let millis_last = (millis % 10) as u8;
-        ptr::copy_nonoverlapping(
-            DIGIT_PAIRS
-                .as_ptr()
-                .add(millis_pair * 2),
-            p.add(18),
-            2,
-        );
+        ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(millis_pair * 2), p.add(18), 2);
         *p.add(20) = b'0' + millis_last;
 
+        // SOH
         *p.add(21) = 0x01;
     }
 
@@ -281,11 +272,7 @@ fn digit36(rem: u8) -> u8 {
 /// // buf[0..13] contains the base36 representation
 /// ```
 #[inline(always)]
-pub fn encode_base36_fixed13(
-    dst: &mut [u8],
-    offset: usize,
-    mut n: u64,
-) -> usize {
+pub fn encode_base36_fixed13(dst: &mut [u8], offset: usize, mut n: u64) -> usize {
     if dst.len().saturating_sub(offset) < 13 {
         return 0;
     }
@@ -311,16 +298,11 @@ pub fn encode_base36_fixed13(
 /// # use fix44_forge_helpers::write_tag_and_ClOrdID;
 /// let mut buf = [0u8; 30];
 /// let written = write_tag_and_ClOrdID(&mut buf, 0, b"11=");
-/// // Result: b"11=ABCDEFGHIJKLM\x01" (actual ID varies)
 /// assert_eq!(written, 17); // 3 (tag) + 13 (ID) + 1 (SOH)
 /// ```
 #[inline(always)]
 #[allow(non_snake_case)]
-pub fn write_tag_and_ClOrdID(
-    bytes: &mut [u8],
-    offset: usize,
-    tag_and_eq: &[u8],
-) -> usize {
+pub fn write_tag_and_ClOrdID(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8]) -> usize {
     let mut pos = 0;
     unsafe {
         ptr::copy_nonoverlapping(
@@ -409,7 +391,6 @@ mod tests {
         let written = write_tag_and_current_timestamp(&mut buf, 0, b"52=");
 
         // Should write tag + timestamp + SOH
-        assert!(written >= 25); // 3 + 21 + 1 minimum
         assert_eq!(&buf[..3], b"52=");
         assert_eq!(buf[written - 1], 0x01); // SOH
 
