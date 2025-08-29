@@ -38,6 +38,12 @@ static PROCESS_TAG: OnceLock<u32> = OnceLock::new();
 // Constants
 const SECS_PER_DAY: u64 = 86_400;
 
+#[cfg(test)]
+pub(crate) fn __reset_date_cache_for_test() {
+    // Invalidate cached day so next call recomputes
+    CACHED_DAY.store(u64::MAX, Ordering::Release);
+}
+
 /// Recompute and publish cached date digits for the given day number (days since Unix epoch).
 #[inline(always)]
 fn publish_date_for_day(day_number: u64) {
@@ -193,6 +199,79 @@ pub fn write_tag_and_current_timestamp(
         *p.add(20) = b'0' + millis_last;
 
         // SOH
+        *p.add(21) = 0x01;
+    }
+
+    tag_and_eq.len() + 22
+}
+
+/// Write a FIX-format UTC timestamp using a pre-fetched `libc::timespec`.
+///
+/// This variant allows callers to obtain the time once (e.g. per message) and
+/// reuse it for multiple timestamp tags (52=, 60=, etc.) without multiple
+/// syscalls.
+///
+/// Buffer requirements:
+/// - `bytes[offset..]` must have capacity for `tag_and_eq.len() + 22` bytes.
+///
+/// Returns the total number of bytes written: `tag_and_eq.len() + 22`.
+#[inline(always)]
+pub fn format_timestamp_from_timespec(
+    bytes: &mut [u8],
+    offset: usize,
+    tag_and_eq: &[u8],
+    ts: &libc::timespec,
+) -> usize {
+    debug_assert!(bytes.len() >= offset + tag_and_eq.len() + 22);
+
+    // Copy tag=
+    unsafe {
+        ptr::copy_nonoverlapping(
+            tag_and_eq.as_ptr(),
+            bytes.as_mut_ptr().add(offset),
+            tag_and_eq.len(),
+        );
+    }
+
+    let secs_u64 = ts.tv_sec as u64;
+    let millis = (ts.tv_nsec / 1_000_000) as u32;
+
+    let day_number = secs_u64 / SECS_PER_DAY;
+    let sec_of_day = (secs_u64 - day_number * SECS_PER_DAY) as u32;
+
+    // Time components
+    let hour = (sec_of_day / 3600) as u8;
+    let minute = ((sec_of_day % 3600) / 60) as u8;
+    let second = (sec_of_day % 60) as u8;
+
+    ensure_date_cache(day_number);
+
+    let p = unsafe { bytes.as_mut_ptr().add(offset + tag_and_eq.len()) };
+
+    unsafe {
+        // Date
+        let packed = CACHED_YYYYMMDD.load(Ordering::Relaxed);
+        ptr::copy_nonoverlapping((&packed as *const u64) as *const u8, p, 8);
+        *p.add(8) = b'-';
+
+        // Hour
+        ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(hour as usize * 2), p.add(9), 2);
+        *p.add(11) = b':';
+
+        // Minute
+        ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(minute as usize * 2), p.add(12), 2);
+        *p.add(14) = b':';
+
+        // Second
+        ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(second as usize * 2), p.add(15), 2);
+        *p.add(17) = b'.';
+
+        // Milliseconds
+        let millis_pair = (millis / 10) as usize;
+        let millis_last = (millis % 10) as u8;
+        ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(millis_pair * 2), p.add(18), 2);
+        *p.add(20) = b'0' + millis_last;
+
         *p.add(21) = 0x01;
     }
 
@@ -383,6 +462,8 @@ mod tests {
                 byte as char
             );
         }
+
+        // (rollover test moved to module scope below)
     }
 
     #[test]
@@ -413,5 +494,60 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_timestamp_date_cache_rollover() {
+        __reset_date_cache_for_test();
+
+        let day_n: i64 = 10;
+        let ts1 = libc::timespec {
+            tv_sec: day_n * 86_400 + 12 * 3600 + 34 * 60 + 56,
+            tv_nsec: 123_000_000,
+        };
+        let ts2 = libc::timespec {
+            tv_sec: (day_n + 1) * 86_400 + 1 * 3600 + 2 * 60 + 3,
+            tv_nsec: 456_000_000,
+        };
+
+        let mut buf1 = [0u8; 64];
+        let mut buf2 = [0u8; 64];
+
+        let w1 = format_timestamp_from_timespec(&mut buf1, 0, b"52=", &ts1);
+        let w2 = format_timestamp_from_timespec(&mut buf2, 0, b"52=", &ts2);
+
+        assert_eq!(&buf1[..3], b"52=");
+        assert_eq!(&buf2[..3], b"52=");
+        assert_eq!(w1, 3 + 21 + 1);
+        assert_eq!(w2, 3 + 21 + 1);
+
+        let date1 = &buf1[3..11];
+        let date2 = &buf2[3..11];
+        assert_ne!(
+            date1, date2,
+            "Date cache failed to update across day boundary"
+        );
+        assert!(
+            date2 > date1,
+            "Rollover ordering unexpected: {:?} !< {:?}",
+            date1,
+            date2
+        );
+    }
+
+    #[test]
+    fn test_format_timestamp_from_timespec_epoch() {
+        __reset_date_cache_for_test();
+        let ts = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 123_000_000,
+        };
+        let mut buf = [0u8; 64];
+        let written = format_timestamp_from_timespec(&mut buf, 0, b"52=", &ts);
+        assert_eq!(written, 3 + 21 + 1);
+        assert_eq!(&buf[..3], b"52=");
+        let ts_bytes = &buf[3..written - 1];
+        assert_eq!(ts_bytes, b"19700101-00:00:00.123");
+        assert_eq!(buf[written - 1], 0x01);
     }
 }
