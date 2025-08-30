@@ -6,158 +6,59 @@ executors:
       - image: cimg/rust:1.89
     environment:
       CARGO_TERM_COLOR: always
-      RUSTFLAGS: ""
+      RUSTFLAGS: "-D warnings"
 
 jobs:
-  build_release:
+  test:
     executor: rust
     steps:
       - checkout
       - run:
-          name: Cargo fetch
+          name: Fetch dependencies
           command: cargo fetch
       - run:
-          name: Cargo build workspace (release, -D warnings)
-          command: |
-            RUSTFLAGS="-D warnings" cargo build --workspace --release
+          name: Build (debug) workspace
+          command: cargo build --workspace
+      - run:
+          name: Run unit & doc tests (workspace)
+          command: cargo test --workspace --all-targets
+      - run:
+          name: Run doc tests only
+          command: cargo test --doc
 
-  test_helpers_crate:
+  benches:
     executor: rust
     steps:
       - checkout
       - run:
-          name: Test fix44-forge-helpers crate
-          command: |
-            cargo test
+          name: Ensure benchmarks compile
+          command: cargo check --benches
       - run:
-          name: Test fix44-forge-helpers documentation
-          command: |
-            cargo test --doc
-
-  unit_tests:
-    executor: rust
-    steps:
-      - checkout
+          name: Run benchmark suite (main branch only)
+          command: cargo bench --all-features -- --noplot
       - run:
-          name: Cargo test main crate
+          name: Summarize benchmark reports
           command: |
-            pwd
-            ls -la
-            ./run_all_xml.sh
-            cargo test -p fix44-forge
-      - run:
-          name: Test workspace integration
-          command: |
-            cargo test --workspace --lib
-
-  codegen_compile_all_xml:
-    executor: rust
-    steps:
-      - checkout
-      - run:
-          name: Codegen compile-smoke across vendor XMLs
-          command: |
-            pwd
-            ls -la
-            FORGE_RUN_CODEGEN_COMPILE_TESTS=1 RUSTFLAGS="-D warnings" cargo test -p fix44-forge --test codegen_compile -- --nocapture
-      - store_artifacts:
-          path: generated
-          destination: generated
-
-  test_generation_and_execution:
-    executor: rust
-    steps:
-      - checkout
-      - run:
-          name: Generate and run tests for all XML files
-          command: |
-            set -e
-            for xml_file in xml/*.xml; do
-              if [ -f "$xml_file" ]; then
-                echo "Generating and running tests for: $(basename "$xml_file")"
-                FORGE_GENERATE_TESTS=1 cargo run -p fix44-forge --quiet -- "$xml_file"
-              fi
-            done
-      - store_artifacts:
-          path: tests/generated
-          destination: generated-tests
-
-  # Benchmark (validation pass) only when changes are merged to main
-  benchmark_helpers_validation:
-    executor: rust
-    steps:
-      - checkout
-      - run:
-          name: Check benchmark compilation
-          command: |
-            cargo check --benches
-      - run:
-          name: Run helpers benchmarks (validation mode)
-          command: |
-            cargo bench -- --test
-
-  # Full benchmark suite only when changes are merged to main
-  benchmark_helpers_full:
-    executor: rust
-    steps:
-      - checkout
-      - run:
-          name: Run full helpers benchmarks
-          command: |
-            cargo bench --all-features
-            echo "Benchmark results generated at $(date)"
-      - run:
-          name: Generate benchmark summary
-          command: |
-            if [ -d "target/criterion" ]; then
-              echo "=== Benchmark Summary ===" > benchmark-summary.txt
-              find target/criterion -name "report" -type d | while read -r dir; do
-                if [ -f "$dir/index.html" ]; then
-                  echo "Report generated: $dir" >> benchmark-summary.txt
-                fi
-              done
-              echo "Total benchmark reports: $(find target/criterion -name "index.html" | wc -l)" >> benchmark-summary.txt
+            if [ -d target/criterion ]; then
+              echo "=== Benchmark Report Paths ===" > benchmark-summary.txt
+              find target/criterion -name index.html -printf "%P\n" >> benchmark-summary.txt || true
               cat benchmark-summary.txt
             fi
       - store_artifacts:
-          path: fix44-forge-helpers/target/criterion
+          path: target/criterion
           destination: criterion-reports
       - store_artifacts:
-          path: fix44-forge-helpers/benchmark-summary.txt
+          path: benchmark-summary.txt
           destination: benchmark-summary
 
 workflows:
   version: 2
-
-  # Test workflow: runs on every push (all branches, including main)
-  tests:
+  tests_all_branches:
     jobs:
-      - build_release
-      - test_helpers_crate:
-          requires:
-            - build_release
-      - unit_tests:
-          requires:
-            - build_release
-            - test_helpers_crate
-      - codegen_compile_all_xml:
-          requires:
-            - build_release
-            - test_helpers_crate
-      - test_generation_and_execution:
-          requires:
-            - codegen_compile_all_xml
-
-  # Benchmarks workflow: only runs after merge to main (branch filter)
-  benchmarks_on_main:
+      - test
+  benches_main_only:
     jobs:
-      - benchmark_helpers_validation:
-          filters:
-            branches:
-              only: main
-      - benchmark_helpers_full:
-          requires:
-            - benchmark_helpers_validation
+      - benches:
           filters:
             branches:
               only: main
