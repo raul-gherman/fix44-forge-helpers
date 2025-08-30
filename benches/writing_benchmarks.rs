@@ -12,65 +12,65 @@ fn benchmark_writing_integers(c: &mut Criterion) {
 
     // u16 benchmarks
     group.bench_function("write_u16_small", |b| {
-        b.iter(|| write_u16(black_box(123), black_box(&mut buf), 0))
+        b.iter(|| write_u16(black_box(&mut buf), 0, black_box(123)))
     });
 
     group.bench_function("write_u16_max", |b| {
-        b.iter(|| write_u16(black_box(65535), black_box(&mut buf), 0))
+        b.iter(|| write_u16(black_box(&mut buf), 0, black_box(65535)))
     });
 
     // u32 benchmarks
     group.bench_function("write_u32_small", |b| {
-        b.iter(|| write_u32(black_box(12345), black_box(&mut buf), 0))
+        b.iter(|| write_u32(black_box(&mut buf), 0, black_box(12345)))
     });
 
     group.bench_function("write_u32_large", |b| {
-        b.iter(|| write_u32(black_box(4294967295), black_box(&mut buf), 0))
+        b.iter(|| write_u32(black_box(&mut buf), 0, black_box(4294967295)))
     });
 
     // u64 benchmarks
     group.bench_function("write_u64_small", |b| {
-        b.iter(|| write_u64(black_box(123456789), black_box(&mut buf), 0))
+        b.iter(|| write_u64(black_box(&mut buf), 0, black_box(123456789)))
     });
 
     group.bench_function("write_u64_large", |b| {
-        b.iter(|| write_u64(black_box(18446744073709551615), black_box(&mut buf), 0))
+        b.iter(|| write_u64(black_box(&mut buf), 0, black_box(18446744073709551615)))
     });
 
     // u128 benchmarks
     group.bench_function("write_u128_small", |b| {
-        b.iter(|| write_u128(black_box(123456789), black_box(&mut buf), 0))
+        b.iter(|| write_u128(black_box(&mut buf), 0, black_box(123456789)))
     });
 
     group.bench_function("write_u128_large", |b| {
         b.iter(|| {
             write_u128(
-                black_box(340282366920938463463374607431768211455),
                 black_box(&mut buf),
                 0,
+                black_box(340282366920938463463374607431768211455),
             )
         })
     });
 
     // Signed integer benchmarks
     group.bench_function("write_i32_positive", |b| {
-        b.iter(|| write_i32(black_box(123456789), black_box(&mut buf), 0))
+        b.iter(|| write_i32(black_box(&mut buf), 0, black_box(123456789)))
     });
 
     group.bench_function("write_i32_negative", |b| {
-        b.iter(|| write_i32(black_box(-123456789), black_box(&mut buf), 0))
+        b.iter(|| write_i32(black_box(&mut buf), 0, black_box(-123456789)))
     });
 
     group.bench_function("write_i32_min", |b| {
-        b.iter(|| write_i32(black_box(i32::MIN), black_box(&mut buf), 0))
+        b.iter(|| write_i32(black_box(&mut buf), 0, black_box(i32::MIN)))
     });
 
     group.bench_function("write_i64_positive", |b| {
-        b.iter(|| write_i64(black_box(9223372036854775807), black_box(&mut buf), 0))
+        b.iter(|| write_i64(black_box(&mut buf), 0, black_box(9223372036854775807)))
     });
 
     group.bench_function("write_i64_negative", |b| {
-        b.iter(|| write_i64(black_box(-9223372036854775808), black_box(&mut buf), 0))
+        b.iter(|| write_i64(black_box(&mut buf), 0, black_box(-9223372036854775808)))
     });
 
     group.finish();
@@ -81,35 +81,35 @@ fn benchmark_writing_floats(c: &mut Criterion) {
     let mut buf = vec![0u8; 100];
 
     group.bench_function("write_f32_integer", |b| {
-        b.iter(|| write_f32(black_box(123.0), black_box(&mut buf), 0))
+        b.iter(|| write_f32(black_box(&mut buf), 0, black_box(123.0)))
     });
 
     group.bench_function("write_f32_decimal", |b| {
-        b.iter(|| write_f32(black_box(123.456789), black_box(&mut buf), 0))
+        b.iter(|| write_f32(black_box(&mut buf), 0, black_box(123.456789)))
     });
 
     group.bench_function("write_f32_negative", |b| {
-        b.iter(|| write_f32(black_box(-123.456789), black_box(&mut buf), 0))
+        b.iter(|| write_f32(black_box(&mut buf), 0, black_box(-123.456789)))
     });
 
     group.bench_function("write_f32_zero", |b| {
-        b.iter(|| write_f32(black_box(0.0), black_box(&mut buf), 0))
+        b.iter(|| write_f32(black_box(&mut buf), 0, black_box(0.0)))
     });
 
     group.bench_function("write_f64_integer", |b| {
-        b.iter(|| write_f64(black_box(123456789.0), black_box(&mut buf), 0))
+        b.iter(|| write_f64(black_box(&mut buf), 0, black_box(123456789.0)))
     });
 
     group.bench_function("write_f64_decimal", |b| {
-        b.iter(|| write_f64(black_box(123.456789012345), black_box(&mut buf), 0))
+        b.iter(|| write_f64(black_box(&mut buf), 0, black_box(123.456789012345)))
     });
 
     group.bench_function("write_f64_negative", |b| {
-        b.iter(|| write_f64(black_box(-123.456789012345), black_box(&mut buf), 0))
+        b.iter(|| write_f64(black_box(&mut buf), 0, black_box(-123.456789012345)))
     });
 
     group.bench_function("write_f64_zero", |b| {
-        b.iter(|| write_f64(black_box(0.0), black_box(&mut buf), 0))
+        b.iter(|| write_f64(black_box(&mut buf), 0, black_box(0.0)))
     });
 
     group.finish();

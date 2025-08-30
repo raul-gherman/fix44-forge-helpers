@@ -82,12 +82,12 @@ let mut buffer = [0u8; 100];
 let mut pos = 0;
 
 // Write integers
-pos += write_u32(12345, &mut buffer, pos);
+pos += write_u32(&mut buffer, pos, 12345);
 assert_eq!(&buffer[..pos], b"12345");
 
 // Write floats with automatic precision
 pos = 0;
-pos += write_f64(123.456789, &mut buffer, pos);
+pos += write_f64(&mut buffer, pos, 123.456789);
 assert_eq!(&buffer[..pos], b"123.456789");
 
 // Write complete FIX fields

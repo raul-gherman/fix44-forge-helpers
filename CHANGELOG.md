@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- High-resolution logging timestamp formatting: `format_logging_timestamp_from_timespec()` and `write_current_logging_timestamp()` producing `YYYY-MM-DD HH:MM:SS.mmm.uuu.nnn`.
+- Syscall-avoiding timestamp variant: `format_timestamp_from_timespec()` (reuse a fetched `timespec` for multiple FIX timestamp tags).
+- Pre-rendered date-digit caching optimization for timestamp path (replacing earlier year/month/day recomputation on cache hits).
+
+### Changed
+- Parameter ordering for primitive numeric and float writers now consistently `(buf, offset, value)`.
+  Affected functions: `write_u16`, `write_u32`, `write_u64`, `write_u128`, `write_i16`, `write_i32`, `write_i64`, `write_f32`, `write_f64`.
+  (Previously value preceded the buffer; tag writer signatures already conformed.)
+- Simplified `read_bool` implementation (single-byte pattern match).
+- Minor internal simplifications in tag writers (direct initialization of `pos`).
+
+### Fixed
+- Corrected civil date conversion year adjustment (previously produced 1968 instead of 1970 at epoch). Logic now adheres to Hinnant date algorithm.
+- Added rollover test ensuring date cache refreshes across UTC day boundaries.
+
+### Performance
+- Reduced FIX timestamp formatting cost via memcpy of cached `YYYYMMDD` digits.
+- Added pure-format benchmarks (timespec-fed) for timestamp functions to isolate syscall overhead.
+
+### Documentation
+- README updated with logging timestamp APIs, revised performance figures, and capacity table entry for the 31-byte logging format.
+- Clarified precision differences between FIX (millisecond) and logging (millisecond/microsecond/nanosecond grouping) timestamps.
+
+### Migration Notes
+- Update call sites for primitive writers:
+  - Before: `write_u32(value, &mut buf, off)`
+  - After:  `write_u32(&mut buf, off, value)`
+- No changes required for any `write_tag_and_*` APIs.
 
 ## [0.1.0] - 2025-08-20
 

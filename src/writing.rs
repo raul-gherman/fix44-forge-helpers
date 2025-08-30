@@ -187,12 +187,12 @@ fn digits_u128(n: u128) -> usize {
 /// ```
 /// # use fix44_forge_helpers::write_u16;
 /// let mut buf = [0u8; 10];
-/// let written = write_u16(12345, &mut buf, 0);
+/// let written = write_u16(&mut buf, 0, 12345);
 /// assert_eq!(written, 5);
 /// assert_eq!(&buf[..written], b"12345");
 /// ```
 #[inline(always)]
-pub fn write_u16(mut n: u16, buf: &mut [u8], pos: usize) -> usize {
+pub fn write_u16(buf: &mut [u8], pos: usize, mut n: u16) -> usize {
     let len = digits_u16(n);
     let mut i = pos + len;
     while n >= 100 {
@@ -227,7 +227,7 @@ pub fn write_u16(mut n: u16, buf: &mut [u8], pos: usize) -> usize {
 /// # Safety
 /// Caller must ensure buffer has at least 10 bytes available from offset.
 #[inline(always)]
-pub fn write_u32(mut n: u32, buf: &mut [u8], pos: usize) -> usize {
+pub fn write_u32(buf: &mut [u8], pos: usize, mut n: u32) -> usize {
     let len = digits_u32(n);
     let mut i = pos + len;
     while n >= 100 {
@@ -262,7 +262,7 @@ pub fn write_u32(mut n: u32, buf: &mut [u8], pos: usize) -> usize {
 /// # Safety
 /// Caller must ensure buffer has at least 20 bytes available from offset.
 #[inline(always)]
-pub fn write_u64(mut n: u64, buf: &mut [u8], pos: usize) -> usize {
+pub fn write_u64(buf: &mut [u8], pos: usize, mut n: u64) -> usize {
     let len = digits_u64(n);
     let mut i = pos + len;
     while n >= 100 {
@@ -297,7 +297,7 @@ pub fn write_u64(mut n: u64, buf: &mut [u8], pos: usize) -> usize {
 /// # Safety
 /// Caller must ensure buffer has at least 39 bytes available from offset.
 #[inline(always)]
-pub fn write_u128(mut n: u128, buf: &mut [u8], pos: usize) -> usize {
+pub fn write_u128(buf: &mut [u8], pos: usize, mut n: u128) -> usize {
     let len = digits_u128(n);
     let mut i = pos + len;
     while n >= 100 {
@@ -331,9 +331,9 @@ pub fn write_u128(mut n: u128, buf: &mut [u8], pos: usize) -> usize {
 ///
 /// Handles the sign and delegates to write_u16 for the magnitude.
 #[inline(always)]
-pub fn write_i16(n: i16, buf: &mut [u8], offset: usize) -> usize {
+pub fn write_i16(buf: &mut [u8], offset: usize, n: i16) -> usize {
     if n >= 0 {
-        write_u16(n as u16, buf, offset)
+        write_u16(buf, offset, n as u16)
     } else if n == i16::MIN {
         // Special case for MIN value to avoid overflow
         let bytes = b"32768";
@@ -346,15 +346,15 @@ pub fn write_i16(n: i16, buf: &mut [u8], offset: usize) -> usize {
         unsafe {
             *buf.get_unchecked_mut(offset) = b'-';
         }
-        1 + write_u16((-n) as u16, buf, offset + 1)
+        1 + write_u16(buf, offset + 1, (-n) as u16)
     }
 }
 
 /// Write an i32 to buffer at offset, returns bytes written.
 #[inline(always)]
-pub fn write_i32(n: i32, buf: &mut [u8], offset: usize) -> usize {
+pub fn write_i32(buf: &mut [u8], offset: usize, n: i32) -> usize {
     if n >= 0 {
-        write_u32(n as u32, buf, offset)
+        write_u32(buf, offset, n as u32)
     } else if n == i32::MIN {
         let bytes = b"2147483648";
         unsafe {
@@ -366,15 +366,15 @@ pub fn write_i32(n: i32, buf: &mut [u8], offset: usize) -> usize {
         unsafe {
             *buf.get_unchecked_mut(offset) = b'-';
         }
-        1 + write_u32((-n) as u32, buf, offset + 1)
+        1 + write_u32(buf, offset + 1, (-n) as u32)
     }
 }
 
 /// Write an i64 to buffer at offset, returns bytes written.
 #[inline(always)]
-pub fn write_i64(n: i64, buf: &mut [u8], offset: usize) -> usize {
+pub fn write_i64(buf: &mut [u8], offset: usize, n: i64) -> usize {
     if n >= 0 {
-        write_u64(n as u64, buf, offset)
+        write_u64(buf, offset, n as u64)
     } else if n == i64::MIN {
         let bytes = b"9223372036854775808";
         unsafe {
@@ -386,7 +386,7 @@ pub fn write_i64(n: i64, buf: &mut [u8], offset: usize) -> usize {
         unsafe {
             *buf.get_unchecked_mut(offset) = b'-';
         }
-        1 + write_u64((-n) as u64, buf, offset + 1)
+        1 + write_u64(buf, offset + 1, (-n) as u64)
     }
 }
 
@@ -460,7 +460,7 @@ fn write_frac15_from_u128(mut v: u128, buf: &mut [u8], pos: usize) -> usize {
 /// # Safety
 /// Caller must ensure finite input values. NaN/Inf behavior is undefined.
 #[inline(always)]
-pub fn write_f32(n: f32, buf: &mut [u8], offset: usize) -> usize {
+pub fn write_f32(buf: &mut [u8], offset: usize, n: f32) -> usize {
     let mut pos = offset;
 
     let neg = n.is_sign_negative();
@@ -476,7 +476,7 @@ pub fn write_f32(n: f32, buf: &mut [u8], offset: usize) -> usize {
     let int_part = scaled / 1_000_000;
     let frac = (scaled % 1_000_000) as u32;
 
-    pos += write_u64(int_part, buf, pos);
+    pos += write_u64(buf, pos, int_part);
 
     if frac != 0 {
         unsafe {
@@ -510,7 +510,7 @@ pub fn write_f32(n: f32, buf: &mut [u8], offset: usize) -> usize {
 /// # Safety
 /// Caller must ensure finite input values. NaN/Inf behavior is undefined.
 #[inline(always)]
-pub fn write_f64(n: f64, buf: &mut [u8], offset: usize) -> usize {
+pub fn write_f64(buf: &mut [u8], offset: usize, n: f64) -> usize {
     let mut pos = offset;
 
     let neg = n.is_sign_negative();
@@ -529,9 +529,9 @@ pub fn write_f64(n: f64, buf: &mut [u8], offset: usize) -> usize {
     let frac_u128 = scaled_u128 % 1_000_000_000_000_000u128;
 
     pos += if int_part <= u64::MAX as u128 {
-        write_u64(int_part as u64, buf, pos)
+        write_u64(buf, pos, int_part as u64)
     } else {
-        write_u128(int_part, buf, pos)
+        write_u128(buf, pos, int_part)
     };
 
     if frac_u128 != 0 {
@@ -635,7 +635,7 @@ pub fn write_tag_and_u16(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], val
         );
     }
     let mut pos = tag_and_eq.len();
-    pos += write_u16(value, bytes, offset + pos);
+    pos += write_u16(bytes, offset + pos, value);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
     }
@@ -653,7 +653,7 @@ pub fn write_tag_and_u32(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], val
         );
     }
     let mut pos = tag_and_eq.len();
-    pos += write_u32(value, bytes, offset + pos);
+    pos += write_u32(bytes, offset + pos, value);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
     }
@@ -671,7 +671,7 @@ pub fn write_tag_and_u64(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], val
         );
     }
     let mut pos = tag_and_eq.len();
-    pos += write_u64(value, bytes, offset + pos);
+    pos += write_u64(bytes, offset + pos, value);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
     }
@@ -689,7 +689,7 @@ pub fn write_tag_and_i16(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], val
         );
     }
     let mut pos = tag_and_eq.len();
-    pos += write_i16(value, bytes, offset + pos);
+    pos += write_i16(bytes, offset + pos, value);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
     }
@@ -707,7 +707,7 @@ pub fn write_tag_and_i32(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], val
         );
     }
     let mut pos = tag_and_eq.len();
-    pos += write_i32(value, bytes, offset + pos);
+    pos += write_i32(bytes, offset + pos, value);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
     }
@@ -725,7 +725,7 @@ pub fn write_tag_and_i64(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], val
         );
     }
     let mut pos = tag_and_eq.len();
-    pos += write_i64(value, bytes, offset + pos);
+    pos += write_i64(bytes, offset + pos, value);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
     }
@@ -743,7 +743,7 @@ pub fn write_tag_and_f32(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], val
         );
     }
     let mut pos = tag_and_eq.len();
-    pos += write_f32(value, bytes, offset + pos);
+    pos += write_f32(bytes, offset + pos, value);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
     }
@@ -761,7 +761,7 @@ pub fn write_tag_and_f64(bytes: &mut [u8], offset: usize, tag_and_eq: &[u8], val
         );
     }
     let mut pos = tag_and_eq.len();
-    pos += write_f64(value, bytes, offset + pos);
+    pos += write_f64(bytes, offset + pos, value);
     unsafe {
         *bytes.get_unchecked_mut(offset + pos) = 0x01;
     }
@@ -775,41 +775,41 @@ mod tests {
     #[test]
     fn test_write_u16() {
         let mut buf = [0u8; 10];
-        assert_eq!(write_u16(0, &mut buf, 0), 1);
+        assert_eq!(write_u16(&mut buf, 0, 0), 1);
         assert_eq!(&buf[..1], b"0");
 
         let mut buf = [0u8; 10];
-        assert_eq!(write_u16(123, &mut buf, 0), 3);
+        assert_eq!(write_u16(&mut buf, 0, 123), 3);
         assert_eq!(&buf[..3], b"123");
 
         let mut buf = [0u8; 10];
-        assert_eq!(write_u16(65535, &mut buf, 0), 5);
+        assert_eq!(write_u16(&mut buf, 0, 65535), 5);
         assert_eq!(&buf[..5], b"65535");
     }
 
     #[test]
     fn test_write_i16() {
         let mut buf = [0u8; 10];
-        assert_eq!(write_i16(-123, &mut buf, 0), 4);
+        assert_eq!(write_i16(&mut buf, 0, -123), 4);
         assert_eq!(&buf[..4], b"-123");
 
         let mut buf = [0u8; 10];
-        assert_eq!(write_i16(i16::MIN, &mut buf, 0), 6);
+        assert_eq!(write_i16(&mut buf, 0, i16::MIN), 6);
         assert_eq!(&buf[..6], b"-32768");
     }
 
     #[test]
     fn test_write_f32() {
         let mut buf = [0u8; 20];
-        let written = write_f32(123.456, &mut buf, 0);
+        let written = write_f32(&mut buf, 0, 123.456);
         assert_eq!(&buf[..written], b"123.456");
 
         let mut buf = [0u8; 20];
-        let written = write_f32(123.0, &mut buf, 0);
+        let written = write_f32(&mut buf, 0, 123.0);
         assert_eq!(&buf[..written], b"123");
 
         let mut buf = [0u8; 20];
-        let written = write_f32(-123.456, &mut buf, 0);
+        let written = write_f32(&mut buf, 0, -123.456);
         assert_eq!(&buf[..written], b"-123.456");
     }
 

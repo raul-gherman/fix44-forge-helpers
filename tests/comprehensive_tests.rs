@@ -28,10 +28,7 @@ mod reading {
     fn read_str_basic() {
         assert_eq!(read_str(b"hello"), "hello");
         assert_eq!(read_str(b""), "");
-        assert_eq!(
-            read_str(b"FIX.4.4"),
-            "FIX.4.4"
-        );
+        assert_eq!(read_str(b"FIX.4.4"), "FIX.4.4");
     }
 
     #[test]
@@ -46,10 +43,7 @@ mod reading {
     #[test]
     fn read_u32_variants() {
         assert_eq!(read_u32(b"0"), 0);
-        assert_eq!(
-            read_u32(b"4294967295"),
-            4294967295
-        );
+        assert_eq!(read_u32(b"4294967295"), 4294967295);
         assert_eq!(read_u32(b"123"), 123);
         assert_eq!(read_u32(b""), 0);
         assert_eq!(read_u32(b"999x"), 999);
@@ -58,14 +52,8 @@ mod reading {
     #[test]
     fn read_u64_variants() {
         assert_eq!(read_u64(b"0"), 0);
-        assert_eq!(
-            read_u64(b"18446744073709551615"),
-            18446744073709551615
-        );
-        assert_eq!(
-            read_u64(b"123456789"),
-            123456789
-        );
+        assert_eq!(read_u64(b"18446744073709551615"), 18446744073709551615);
+        assert_eq!(read_u64(b"123456789"), 123456789);
         assert_eq!(read_u64(b""), 0);
     }
 
@@ -81,14 +69,8 @@ mod reading {
     #[test]
     fn read_i32_variants() {
         assert_eq!(read_i32(b"0"), 0);
-        assert_eq!(
-            read_i32(b"2147483647"),
-            2147483647
-        );
-        assert_eq!(
-            read_i32(b"-2147483648"),
-            -2147483648
-        );
+        assert_eq!(read_i32(b"2147483647"), 2147483647);
+        assert_eq!(read_i32(b"-2147483648"), -2147483648);
         assert_eq!(read_i32(b"-1"), -1);
         assert_eq!(read_i32(b""), 0);
     }
@@ -96,14 +78,8 @@ mod reading {
     #[test]
     fn read_i64_variants() {
         assert_eq!(read_i64(b"0"), 0);
-        assert_eq!(
-            read_i64(b"9223372036854775807"),
-            9223372036854775807
-        );
-        assert_eq!(
-            read_i64(b"-9223372036854775808"),
-            -9223372036854775808
-        );
+        assert_eq!(read_i64(b"9223372036854775807"), 9223372036854775807);
+        assert_eq!(read_i64(b"-9223372036854775808"), -9223372036854775808);
         assert_eq!(read_i64(b"-1"), -1);
         assert_eq!(read_i64(b""), 0);
     }
@@ -126,10 +102,7 @@ mod reading {
         assert_eq!(read_f64(b"0"), 0.0);
         assert_eq!(read_f64(b"1.5"), 1.5);
         assert_eq!(read_f64(b"-2.5"), -2.5);
-        assert_eq!(
-            read_f64(b"123.456789012345"),
-            123.456789012345
-        );
+        assert_eq!(read_f64(b"123.456789012345"), 123.456789012345);
         assert_eq!(read_f64(b""), 0.0);
 
         // Test precision
@@ -148,7 +121,7 @@ mod writing {
 
         for &n in &test_cases {
             let mut buf = [0u8; 16];
-            let len = write_u16(n, &mut buf, 0);
+            let len = write_u16(&mut buf, 0, n);
 
             assert!(len > 0);
             let written = std::str::from_utf8(&buf[..len]).unwrap();
@@ -165,7 +138,7 @@ mod writing {
 
         for &n in &test_cases {
             let mut buf = [0u8; 16];
-            let len = write_u32(n, &mut buf, 0);
+            let len = write_u32(&mut buf, 0, n);
 
             assert!(len > 0);
             let written = std::str::from_utf8(&buf[..len]).unwrap();
@@ -182,7 +155,7 @@ mod writing {
 
         for &n in &test_cases {
             let mut buf = [0u8; 32];
-            let len = write_u64(n, &mut buf, 0);
+            let len = write_u64(&mut buf, 0, n);
 
             assert!(len > 0);
             let written = std::str::from_utf8(&buf[..len]).unwrap();
@@ -199,7 +172,7 @@ mod writing {
 
         for &n in &test_cases {
             let mut buf = [0u8; 16];
-            let len = write_i16(n, &mut buf, 0);
+            let len = write_i16(&mut buf, 0, n);
 
             assert!(len > 0);
             let written = std::str::from_utf8(&buf[..len]).unwrap();
@@ -216,7 +189,7 @@ mod writing {
 
         for &n in &test_cases {
             let mut buf = [0u8; 16];
-            let len = write_i32(n, &mut buf, 0);
+            let len = write_i32(&mut buf, 0, n);
 
             assert!(len > 0);
             let written = std::str::from_utf8(&buf[..len]).unwrap();
@@ -241,7 +214,7 @@ mod writing {
 
         for &n in &test_cases {
             let mut buf = [0u8; 32];
-            let len = write_i64(n, &mut buf, 0);
+            let len = write_i64(&mut buf, 0, n);
 
             assert!(len > 0);
             let written = std::str::from_utf8(&buf[..len]).unwrap();
@@ -258,7 +231,7 @@ mod writing {
 
         for &n in &test_cases {
             let mut buf = [0u8; 64];
-            let len = write_f32(n, &mut buf, 0);
+            let len = write_f32(&mut buf, 0, n);
 
             assert!(len > 0);
             let written = std::str::from_utf8(&buf[..len]).unwrap();
@@ -287,7 +260,7 @@ mod writing {
 
         for &n in &test_cases {
             let mut buf = [0u8; 128];
-            let len = write_f64(n, &mut buf, 0);
+            let len = write_f64(&mut buf, 0, n);
 
             assert!(len > 0);
             let written = std::str::from_utf8(&buf[..len]).unwrap();
@@ -308,7 +281,7 @@ mod writing {
 
         for &n in &test_cases {
             let mut buf = [0u8; 64];
-            let len = write_u128(n, &mut buf, 0);
+            let len = write_u128(&mut buf, 0, n);
 
             assert!(len > 0);
             let written = std::str::from_utf8(&buf[..len]).unwrap();
@@ -516,12 +489,7 @@ mod special_functions {
         // All other positions should be digits
         for (i, &b) in timestamp.iter().enumerate() {
             if ![8, 11, 14, 17].contains(&i) {
-                assert!(
-                    b.is_ascii_digit(),
-                    "Non-digit at position {}: {}",
-                    i,
-                    b
-                );
+                assert!(b.is_ascii_digit(), "Non-digit at position {}: {}", i, b);
             }
         }
     }
@@ -584,10 +552,7 @@ mod special_functions {
             assert_eq!(len, 17);
 
             let id: [u8; 13] = buf[3..16].try_into().unwrap();
-            assert!(
-                seen.insert(id),
-                "Duplicate ClOrdID generated"
-            );
+            assert!(seen.insert(id), "Duplicate ClOrdID generated");
         }
     }
 
@@ -596,9 +561,7 @@ mod special_functions {
         const THREADS: usize = 4;
         const PER_THREAD: usize = 1000;
 
-        let global_set = Arc::new(Mutex::new(
-            HashSet::<[u8; 13]>::new(),
-        ));
+        let global_set = Arc::new(Mutex::new(HashSet::<[u8; 13]>::new()));
         let mut handles = vec![];
 
         for _ in 0..THREADS {
@@ -615,10 +578,7 @@ mod special_functions {
 
                 let mut global = global_set.lock().unwrap();
                 for id in local_ids {
-                    assert!(
-                        global.insert(id),
-                        "Duplicate ClOrdID across threads"
-                    );
+                    assert!(global.insert(id), "Duplicate ClOrdID across threads");
                 }
             }));
         }
@@ -669,41 +629,23 @@ mod edge_cases {
 
         // u32
         assert_eq!(read_u32(b"0"), 0);
-        assert_eq!(
-            read_u32(b"4294967295"),
-            4294967295
-        );
+        assert_eq!(read_u32(b"4294967295"), 4294967295);
 
         // u64
         assert_eq!(read_u64(b"0"), 0);
-        assert_eq!(
-            read_u64(b"18446744073709551615"),
-            18446744073709551615
-        );
+        assert_eq!(read_u64(b"18446744073709551615"), 18446744073709551615);
 
         // i16
         assert_eq!(read_i16(b"-32768"), -32768);
         assert_eq!(read_i16(b"32767"), 32767);
 
         // i32
-        assert_eq!(
-            read_i32(b"-2147483648"),
-            -2147483648
-        );
-        assert_eq!(
-            read_i32(b"2147483647"),
-            2147483647
-        );
+        assert_eq!(read_i32(b"-2147483648"), -2147483648);
+        assert_eq!(read_i32(b"2147483647"), 2147483647);
 
         // i64
-        assert_eq!(
-            read_i64(b"-9223372036854775808"),
-            -9223372036854775808
-        );
-        assert_eq!(
-            read_i64(b"9223372036854775807"),
-            9223372036854775807
-        );
+        assert_eq!(read_i64(b"-9223372036854775808"), -9223372036854775808);
+        assert_eq!(read_i64(b"9223372036854775807"), 9223372036854775807);
     }
 
     #[test]
@@ -728,21 +670,15 @@ mod edge_cases {
         let mut buf = [0u8; 64];
 
         // Write at various offsets
-        let len1 = write_u32(123, &mut buf, 10);
-        let len2 = write_u32(456, &mut buf, 20);
+        let len1 = write_u32(&mut buf, 10, 123);
+        let len2 = write_u32(&mut buf, 20, 456);
 
         assert!(len1 > 0);
         assert!(len2 > 0);
 
         // Verify data at correct positions
-        assert_eq!(
-            read_u32(&buf[10..10 + len1]),
-            123
-        );
-        assert_eq!(
-            read_u32(&buf[20..20 + len2]),
-            456
-        );
+        assert_eq!(read_u32(&buf[10..10 + len1]), 123);
+        assert_eq!(read_u32(&buf[20..20 + len2]), 456);
     }
 
     #[test]
@@ -750,18 +686,10 @@ mod edge_cases {
         let mut buf = [0u8; 128];
 
         // Test very large tag numbers and values
-        let len = write_tag_and_u64(
-            &mut buf,
-            0,
-            b"99999=",
-            u64::MAX,
-        );
+        let len = write_tag_and_u64(&mut buf, 0, b"99999=", u64::MAX);
 
         let expected = format!("99999={}\x01", u64::MAX);
-        assert_eq!(
-            &buf[..len],
-            expected.as_bytes()
-        );
+        assert_eq!(&buf[..len], expected.as_bytes());
     }
 }
 
