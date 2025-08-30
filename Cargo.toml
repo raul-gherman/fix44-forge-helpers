@@ -1,18 +1,18 @@
 [package]
-authors = ["Raul Gherman <raul@gherman.proton.me>"]
+authors = ["Raul Gherman <raul.gherman@proton.me>"]
 categories = ["parser-implementations", "encoding", "network-programming"]
 description = "Zero-allocation, high-performance helper functions for FIX 4.4 protocol parsing and serialization"
 documentation = "https://docs.rs/fix44-forge-helpers"
 edition = "2024"
 exclude = ["target/", "benches/target/"]
-homepage = "https://github.com/raul-gherman/fix44-forge"
+homepage = "https://github.com/raul-gherman/fix44-forge-helpers"
 keywords = ["fix", "protocol", "parsing", "serialization", "finance"]
 license = "MIT OR Apache-2.0"
 name = "fix44-forge-helpers"
 readme = "README.md"
 repository = "https://github.com/raul-gherman/fix44-forge-helpers"
 rust-version = "1.89"
-version = "0.1.3"
+version = "0.2.0"
 
 # Platform support - Unix-like systems only
 [target.'cfg(unix)'.dependencies]

@@ -38,6 +38,14 @@ static PROCESS_TAG: OnceLock<u32> = OnceLock::new();
 // Constants
 const SECS_PER_DAY: u64 = 86_400;
 
+// Static skeleton for high-resolution logging timestamps (fixed 31 bytes).
+// Format: "0000-00-00 00:00:00.000.000.000"
+// Positions:
+//  Year 0..4  '-' 4  Month 5..7 '-' 7 Day 8..10 ' ' 10
+//  Hour 11..13 ':' 13 Min 14..16 ':' 16 Sec 17..19 '.' 19
+//  msec 20..23 '.' 23 usec 24..27 '.' 27 nsec 28..31
+static LOG_TS_SKELETON: [u8; 31] = *b"0000-00-00 00:00:00.000.000.000";
+
 #[cfg(test)]
 pub(crate) fn __reset_date_cache_for_test() {
     // Invalidate cached day so next call recomputes
@@ -249,29 +257,29 @@ pub fn format_timestamp_from_timespec(
     let p = unsafe { bytes.as_mut_ptr().add(offset + tag_and_eq.len()) };
 
     unsafe {
-        // Date
+        // Copy static skeleton "YYYYMMDD-HH:MM:SS.mmm" (21 bytes) then overwrite digits.
+        // Positions: 0..8 date, 8 '-' already placed, time at 9.., '.' at 17.
+        const FIX_TS_SKELETON: [u8; 21] = *b"00000000-00:00:00.000";
+        ptr::copy_nonoverlapping(FIX_TS_SKELETON.as_ptr(), p, 21);
+
+        // Date (cached) overwrite 8 digits
         let packed = CACHED_YYYYMMDD.load(Ordering::Relaxed);
         ptr::copy_nonoverlapping((&packed as *const u64) as *const u8, p, 8);
-        *p.add(8) = b'-';
 
         // Hour
         ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(hour as usize * 2), p.add(9), 2);
-        *p.add(11) = b':';
-
         // Minute
         ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(minute as usize * 2), p.add(12), 2);
-        *p.add(14) = b':';
-
         // Second
         ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(second as usize * 2), p.add(15), 2);
-        *p.add(17) = b'.';
 
-        // Milliseconds
+        // Milliseconds: pair + last
         let millis_pair = (millis / 10) as usize;
         let millis_last = (millis % 10) as u8;
         ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(millis_pair * 2), p.add(18), 2);
         *p.add(20) = b'0' + millis_last;
 
+        // SOH (after full 21-char timestamp)
         *p.add(21) = 0x01;
     }
 
@@ -414,6 +422,8 @@ pub fn format_logging_timestamp_from_timespec(
 ) -> usize {
     debug_assert!(bytes.len() >= offset + 31);
 
+    // Copy static template with separators, then overwrite digit positions.
+
     let secs_u64 = ts.tv_sec as u64;
     let ns = ts.tv_nsec as u32;
 
@@ -424,7 +434,7 @@ pub fn format_logging_timestamp_from_timespec(
     let minute = ((sec_of_day % 3600) / 60) as u8;
     let second = (sec_of_day % 60) as u8;
 
-    // Subsecond groups
+    // Subsecond groups (always 0..999)
     let millis = ns / 1_000_000;
     let micros = (ns / 1_000) % 1000;
     let nanos = ns % 1000;
@@ -434,37 +444,29 @@ pub fn format_logging_timestamp_from_timespec(
     unsafe {
         let p = bytes.as_mut_ptr().add(offset);
 
-        // Cached YYYYMMDD -> need YYYY-MM-DD
+        // Copy template once
+        ptr::copy_nonoverlapping(LOG_TS_SKELETON.as_ptr(), p, 31);
+
+        // Cached date digits YYYYMMDD -> expand into YYYY-MM-DD
         let packed = CACHED_YYYYMMDD.load(Ordering::Relaxed);
         let date = packed.to_ne_bytes(); // [Y,Y,Y,Y,M,M,D,D]
 
         // Year
         ptr::copy_nonoverlapping(date.as_ptr().add(0), p.add(0), 4);
-        // '-'
-        *p.add(4) = b'-';
         // Month
         ptr::copy_nonoverlapping(date.as_ptr().add(4), p.add(5), 2);
-        *p.add(7) = b'-';
         // Day
         ptr::copy_nonoverlapping(date.as_ptr().add(6), p.add(8), 2);
-        *p.add(10) = b' ';
 
         // Hour
         ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(hour as usize * 2), p.add(11), 2);
-        *p.add(13) = b':';
-
         // Minute
         ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(minute as usize * 2), p.add(14), 2);
-        *p.add(16) = b':';
-
         // Second
         ptr::copy_nonoverlapping(DIGIT_PAIRS.as_ptr().add(second as usize * 2), p.add(17), 2);
-        *p.add(19) = b'.';
 
-        // Helper closure to write a 3‑digit zero-padded number fast
         #[inline(always)]
         unsafe fn write_3(dst: *mut u8, val: u32) {
-            // val < 1000
             let hi = (val / 100) as usize;
             let lo2 = (val % 100) as usize;
             unsafe {
@@ -474,13 +476,8 @@ pub fn format_logging_timestamp_from_timespec(
             }
         }
 
-        // Millis
         write_3(p.add(20), millis);
-        *p.add(23) = b'.';
-        // Micros
         write_3(p.add(24), micros);
-        *p.add(27) = b'.';
-        // Nanos
         write_3(p.add(28), nanos);
     }
 
