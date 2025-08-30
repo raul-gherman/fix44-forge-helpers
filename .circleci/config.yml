@@ -35,7 +35,7 @@ jobs:
           command: cargo check --benches
       - run:
           name: Run benchmark suite (main branch only)
-          command: cargo bench --all-features -- --noplot
+          command: cargo bench
       - run:
           name: Summarize benchmark reports
           command: |
